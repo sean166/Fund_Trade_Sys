@@ -5,12 +5,12 @@ using System.Web;
 
 namespace Fund_Trade_Sys.Models
 {
-    public class Fund
+    public class FundPrice
     {
-        public int FundId { get; set; }
-        public string FundName { get; set; }
-        public string FundCode { get; set; }
-        public DateTime PriceTime { get; set; }
+        public int PriceId { get; set; }
         public double Price { get; set; }
+        public int FundId { get; set; }
+        public string FundCode { get; set; }
+        public DateTime PriceDate { get; set; }
     }
 }
