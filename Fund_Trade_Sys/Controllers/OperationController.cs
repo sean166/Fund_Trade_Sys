@@ -308,28 +308,61 @@ namespace Fund_Trade_Sys.Controllers
                 //todo order can be created but set the status to denied or discarded
             }
 
-            
 
-            
-
-            
-             
-
-
-            return Ok();
+        
 
         }
 
         [HttpGet]
         public IHttpActionResult GetHoldingFunds(int accountId)
         {
-            return Ok(GetHoldingFunds(accountId));
+            List<HoldFund>holdFunds = new List<HoldFund>();
+            SqlConnection sqlConnection = new SqlConnection(connection);
+            string query = "Select * From clientHoldFunds where account_id = " + accountId;
+            sqlConnection.Open();
+            SqlCommand sqlCommand = new SqlCommand(query, sqlConnection);
+            SqlDataReader reader = sqlCommand.ExecuteReader();
+            while (reader.Read())
+            {
+                holdFunds.Add(new HoldFund(){
+                    Unit =  (int)reader["units"],
+                    AveragePrice = (double)reader["ave_price"],
+                    Amount = (double)reader["amount"],
+                    FundCode = reader["fund_name"].ToString(),
+
+                });
+            }
+            sqlConnection.Close();
+
+            return Ok(holdFunds);
         }
 
         [HttpGet]
         public IHttpActionResult GetOrderHistory(int accountId)
         {
-            return Ok();
+            List<Order> orders = new List<Order>();
+            SqlConnection sqlConnection = new SqlConnection(connection);
+            string query = "Select * From orders where account_id = " + accountId;
+            sqlConnection.Open();
+            SqlCommand sqlCommand = new SqlCommand(query, sqlConnection);
+            SqlDataReader reader = sqlCommand.ExecuteReader();
+            while (reader.Read())
+            {
+                orders.Add(new Order()
+                {
+                    Units = (int)reader["units"],
+                    Price = (double)reader["price"],
+                    Amount = (double)reader["amount"],
+                    FundCode = reader["fund_name"].ToString(),
+                    OrderTime = (DateTime)reader["order_time"],
+                    OrderStatus = reader["order_status"].ToString()
+
+                });
+            }
+            sqlConnection.Close();
+
+
+            return Ok(orders);
         }
         [HttpGet]
         public IHttpActionResult InvestmentPerformance(int accountId)

@@ -8,6 +8,7 @@ namespace Fund_Trade_Sys.Models
     public class Order
     {
         public int OrderId { get; set; }
+        public string FundCode { get; set; }
         public double Amount { get; set; }
         public int Units { get; set; }
         public double Price { get; set; }
