@@ -182,6 +182,7 @@ namespace Fund_Trade_Sys.Controllers
 
 
         //consider to add trans_date for sorting and filtering
+        [Authorize]
         [HttpGet]
         public IHttpActionResult GetHistoryCashFlow(int accountId)
         {
@@ -203,9 +204,142 @@ namespace Fund_Trade_Sys.Controllers
             sqlConnection.Close();
             return Ok(cashFlows);
         }
-        
+
+        [HttpPost]
+        public IHttpActionResult CreateOrder(string fundCode, int unit, int accountId)
+        {
+            //update the daily price first
+            UpdateDailyPrice();
+            int orderId = 0;
+            DateTime today = DateTime.Now;
+            var d = today.ToString("yyyy-MM-dd");
+            SqlConnection sqlConnection = new SqlConnection(connection);
+
+            //get fund  price
+            string fundQuery = "Select Top 1 price From securities Where convert(date,price_date) = @today and fund_code = @fund_code";
+            sqlConnection.Open();
+            SqlCommand sqlCommand = new SqlCommand(fundQuery, sqlConnection);
+            sqlCommand.Parameters.AddWithValue("@today", d);
+            sqlCommand.Parameters.AddWithValue("@fund_code",fundCode);           
+            var price = Convert.ToDouble(sqlCommand.ExecuteScalar());
+            sqlConnection.Close();
+
+            //check account balance
+            var amount = price * unit;
+            string query = "Select balance From SECClientAccount Where account_id = " + accountId;
+            sqlConnection.Open();
+            SqlCommand cmd = new SqlCommand(query, sqlConnection);
+            
+            var balance = Convert.ToDouble(cmd.ExecuteScalar());
+            sqlConnection.Close();
+            if (balance > amount)
+            {
+                //update balance               
+                string balanceQuery = "Update SECClientAccount Set balance = balance - @amount Where account_id = " + accountId;
+                sqlConnection.Open();
+                SqlCommand cmd2 = new SqlCommand(balanceQuery, sqlConnection);
+                cmd2.Parameters.AddWithValue("@amount", amount);
+                cmd2.ExecuteNonQuery();
+                sqlConnection.Close();
+
+                //create the order
+                string orderQuery = "Insert INTO orders Values(@fund_name,@amount,@units,@price,@order_time,@order_status,@account_id)";
+                orderQuery+= "SELECT SCOPE_IDENTITY()";
+                sqlConnection.Open();
+                SqlCommand cmd3 = new SqlCommand(orderQuery, sqlConnection);
+                cmd3.Parameters.AddWithValue("fund_name",fundCode.ToString());
+                cmd3.Parameters.AddWithValue("@amount", amount);
+                cmd3.Parameters.AddWithValue("@units", unit);
+                cmd3.Parameters.AddWithValue("@price", price);
+                cmd3.Parameters.AddWithValue("@order_time", today);
+                cmd3.Parameters.AddWithValue("@order_status", "Pending");
+                cmd3.Parameters.AddWithValue("@account_id",accountId);
+                orderId = Convert.ToInt32(cmd3.ExecuteScalar());
+                sqlConnection.Close();
+
+                //create/update client holding funds
+                //check if user hold the funds before
+                string checkQuery = "Select units From clientHoldFunds Where fund_name = @fund_name and account_id =  " + accountId;
+                sqlConnection.Open();
+                SqlCommand cmd4 = new SqlCommand(checkQuery, sqlConnection);
+                cmd4.Parameters.AddWithValue("@fund_name", fundCode.ToString());
+                var isHold = Convert.ToInt32(cmd4.ExecuteScalar());
+                sqlConnection.Close();
+
+                if (isHold > 0)//update the hold fund amount, units and the average price
+                {
+                    string updateFundQuery = " Update clientHoldFunds SET ave_price = (amount+@amount)/(units+@units),amount = amount+ @amount, units = units+@units WHERE fund_name = @fund_name and account_id = " +accountId;
+                    sqlConnection.Open();
+                    SqlCommand cmd6 = new SqlCommand(updateFundQuery, sqlConnection);
+                    cmd6.Parameters.AddWithValue("@amount", amount);
+                    cmd6.Parameters.AddWithValue("@units", unit);
+                    cmd6.Parameters.AddWithValue("@fund_name", fundCode.ToString());
+                    cmd6.ExecuteNonQuery();
+                    sqlConnection.Close();
+                }
+                else//insert a new hold fund
+                {
+                    string newFundQuery = "Insert INTO clientHoldFunds Values(@ave_price,@amount,@units,@fund_name,@account_id)";
+                    newFundQuery+= "SELECT SCOPE_IDENTITY()";
+                    sqlConnection.Open();
+                    SqlCommand cmd5 = new SqlCommand(newFundQuery, sqlConnection);
+                    cmd5.Parameters.AddWithValue("@ave_price", price);
+                    cmd5.Parameters.AddWithValue("@amount", amount);
+                    cmd5.Parameters.AddWithValue("@units",unit);
+                    cmd5.Parameters.AddWithValue("@fund_name",fundCode);
+                    cmd5.Parameters.AddWithValue("@account_id", accountId);
+                    cmd5.ExecuteScalar();
+                    sqlConnection.Close();
+
+                }
+                //order excuted so update the order status to completed
+
+                string statusQuery = "Update orders Set order_status = @status Where order_id = " + orderId;
+                sqlConnection.Open();
+                SqlCommand cmd7 = new SqlCommand(statusQuery, sqlConnection);
+                cmd7.Parameters.AddWithValue("@status", "Completed");
+                cmd7.ExecuteNonQuery();
+                sqlConnection.Close();
+                return Ok("Order Completed");
+            }
+            else
+            {
+                return Ok("No enough money");
+                //todo order can be created but set the status to denied or discarded
+            }
+
+            
+
+            
+
+            
+             
+
+
+            return Ok();
+
+        }
+
+        [HttpGet]
+        public IHttpActionResult GetHoldingFunds(int accountId)
+        {
+            return Ok(GetHoldingFunds(accountId));
+        }
+
+        [HttpGet]
+        public IHttpActionResult GetOrderHistory(int accountId)
+        {
+            return Ok();
+        }
+        [HttpGet]
+        public IHttpActionResult InvestmentPerformance(int accountId)
+        {
+            return Ok();
+        }
         public void UpdateDailyPrice()
         {
+            
+
             //check whether today is a workday
             bool IsWorkday = DateTime.Now.DayOfWeek != DayOfWeek.Sunday && DateTime.Now.DayOfWeek != DayOfWeek.Saturday;
             if (IsWorkday)
@@ -217,10 +351,10 @@ namespace Fund_Trade_Sys.Controllers
                 SqlCommand command = new SqlCommand(query1, sqlConnection);
                 command.Parameters.AddWithValue("@today",d);
                 sqlConnection.Open();
-                var isPriceExist = Convert.ToInt32(command.ExecuteNonQuery());
+                var isPriceExist = Convert.ToInt32(command.ExecuteScalar());
                 sqlConnection.Close();
                 //if today's price haven't created, create it
-                if (isPriceExist==0)
+                if (isPriceExist<1)
                 {
                     List<FundPrice> funds = new List<FundPrice>();
                     //get fundslist to see what kinds of funds we got. to prepare parameters for create new price list
@@ -246,7 +380,7 @@ namespace Fund_Trade_Sys.Controllers
                     foreach (var f in funds)
                     {
 
-                        var ranNum = Math.Round(r.NextDouble() * 200 + 5);
+                        var ranNum = Math.Round(r.NextDouble() * 200 + 5, 2);
                         f.PriceDate = today;
                         f.Price = ranNum;
                         string query2 = "Insert into securities Values(@fund_id,@price,@fund_code,@price_date)";
