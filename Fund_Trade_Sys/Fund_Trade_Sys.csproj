@@ -229,6 +229,8 @@
     <Compile Include="Models\FundPrice.cs" />
     <Compile Include="Models\HoldFund.cs" />
     <Compile Include="Models\IdentityModels.cs" />
+    <Compile Include="Models\InvestPerformance.cs" />
+    <Compile Include="Models\Margin.cs" />
     <Compile Include="Models\Order.cs" />
     <Compile Include="Models\SECClientAccount.cs" />
     <Compile Include="MyAuthorizationServerProvider.cs" />

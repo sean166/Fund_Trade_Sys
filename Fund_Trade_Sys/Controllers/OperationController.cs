@@ -206,7 +206,8 @@ namespace Fund_Trade_Sys.Controllers
         }
 
         [HttpPost]
-        public IHttpActionResult CreateOrder(string fundCode, int unit, int accountId)
+        public IHttpActionResult CreateOrder(string fundCode, int unit, int accountId) 
+
         {
             //update the daily price first
             UpdateDailyPrice();
@@ -224,6 +225,11 @@ namespace Fund_Trade_Sys.Controllers
             var price = Convert.ToDouble(sqlCommand.ExecuteScalar());
             sqlConnection.Close();
 
+            //if price == 0 means the fund is not exist
+            if(price == 0)
+            {
+                return Ok("The fund is not exist please double check your fund code");
+            }
             //check account balance
             var amount = price * unit;
             string query = "Select balance From SECClientAccount Where account_id = " + accountId;
@@ -266,16 +272,49 @@ namespace Fund_Trade_Sys.Controllers
                 var isHold = Convert.ToInt32(cmd4.ExecuteScalar());
                 sqlConnection.Close();
 
-                if (isHold > 0)//update the hold fund amount, units and the average price
+                string checkQuery1 = "Select chf_id From clientHoldFunds Where fund_name = @fund_name and account_id =  " + accountId;
+                sqlConnection.Open();
+                SqlCommand cmd41 = new SqlCommand(checkQuery1, sqlConnection);
+                cmd41.Parameters.AddWithValue("@fund_name", fundCode.ToString());
+                var isExist = Convert.ToInt32(cmd41.ExecuteScalar());
+                sqlConnection.Close();
+
+                //if user wants to sell funds check about the holding shares are bigger or equal to the shares he wants to sell
+                if (unit < 0 && isHold<-unit)
                 {
-                    string updateFundQuery = " Update clientHoldFunds SET ave_price = (amount+@amount)/(units+@units),amount = amount+ @amount, units = units+@units WHERE fund_name = @fund_name and account_id = " +accountId;
-                    sqlConnection.Open();
-                    SqlCommand cmd6 = new SqlCommand(updateFundQuery, sqlConnection);
-                    cmd6.Parameters.AddWithValue("@amount", amount);
-                    cmd6.Parameters.AddWithValue("@units", unit);
-                    cmd6.Parameters.AddWithValue("@fund_name", fundCode.ToString());
-                    cmd6.ExecuteNonQuery();
-                    sqlConnection.Close();
+                    return Ok("No enough shares to sell");
+                }
+               
+                
+                if (isExist > 0)//update the hold fund amount, units and the average price
+                {
+                    string updateFundQuery;
+                    if (amount > 0)
+                    {
+                        updateFundQuery = " Update clientHoldFunds SET ave_price = (units*ave_price+@amount)/(units+@units),amount = amount+ @amount, units = units+@units WHERE fund_name = @fund_name and account_id = " + accountId;
+                        sqlConnection.Open();
+                        SqlCommand cmd6 = new SqlCommand(updateFundQuery, sqlConnection);
+                        cmd6.Parameters.AddWithValue("@amount", amount);
+                        cmd6.Parameters.AddWithValue("@units", unit);
+                        cmd6.Parameters.AddWithValue("@fund_name", fundCode.ToString());
+                        cmd6.ExecuteNonQuery();
+                        sqlConnection.Close();
+                    }
+                    //amount < 0 means sell the funds and it doesn't affect the holding fund average price
+                    else
+                    {
+                        updateFundQuery = " Update clientHoldFunds SET amount = (@units+units)*@price, units = units+@units WHERE fund_name = @fund_name and account_id = " + accountId;
+                        sqlConnection.Open();
+                        SqlCommand cmd6 = new SqlCommand(updateFundQuery, sqlConnection);
+                        cmd6.Parameters.AddWithValue("@amount", amount);
+                        cmd6.Parameters.AddWithValue("@units", unit);
+                        cmd6.Parameters.AddWithValue("@price", price);
+                        cmd6.Parameters.AddWithValue("@fund_name", fundCode.ToString());
+                        cmd6.ExecuteNonQuery();
+                        sqlConnection.Close();
+                    }
+                    
+                    
                 }
                 else//insert a new hold fund
                 {
@@ -292,6 +331,49 @@ namespace Fund_Trade_Sys.Controllers
                     sqlConnection.Close();
 
                 }
+
+                //create an entity to store client's gain/loss
+                //buy funds won't create gain or loss only affect the average price, so here we only record sold orders
+                if (unit<0 && isHold>=-unit)
+                {
+                    string getAveragePrice = "Select top(1)  * From clientHoldFunds where fund_name = @fund_code and account_id = " + accountId;
+                   HoldFund holdFund= new HoldFund();                           
+                    sqlConnection.Open();
+                    SqlCommand cmdf = new SqlCommand(getAveragePrice, sqlConnection);
+                    cmdf.Parameters.AddWithValue("@fund_code",fundCode.ToString());
+                    SqlDataReader reader = cmdf.ExecuteReader();
+                    while (reader.Read())
+                    {
+
+                        holdFund.Unit = Convert.ToInt32(reader["units"]);
+                        holdFund.AveragePrice = Convert.ToDouble(reader["ave_price"]);
+                        holdFund.Amount = Convert.ToDouble(reader["amount"]);
+                        holdFund.FundCode = reader["fund_name"].ToString();
+
+                       
+                    }
+                    sqlConnection.Close();
+
+                    var profits = Convert.ToDouble( (holdFund.AveragePrice - price) * unit);
+                    string profitQuery = "INSERT INTO margin VALUES(@margin_date,@fund_code,@profit,@curAvePrice,@markPrice,@curAmount,@holdUnits,@tradeUnits,@account_id)";
+                    profitQuery += "SELECT SCOPE_IDENTITY()";
+                    sqlConnection.Open();
+                    SqlCommand cmdm = new SqlCommand(profitQuery, sqlConnection);
+                    cmdm.Parameters.AddWithValue("@margin_date", today);
+                    cmdm.Parameters.AddWithValue("@fund_code", fundCode.ToString());
+                    cmdm.Parameters.AddWithValue("@profit", profits);
+                    cmdm.Parameters.AddWithValue("@curAvePrice",holdFund.AveragePrice);
+                    cmdm.Parameters.AddWithValue("@markPrice",price);
+                    cmdm.Parameters.AddWithValue("@curAmount",holdFund.Amount);
+                    cmdm.Parameters.AddWithValue("@holdUnits", holdFund.Unit);//after order the units of user holding at the moment
+                    cmdm.Parameters.AddWithValue("@tradeUnits",unit);
+                    cmdm.Parameters.AddWithValue("account_id",accountId);
+                    cmdm.ExecuteNonQuery();
+                    sqlConnection.Close(); 
+                }
+                
+
+
                 //order excuted so update the order status to completed
 
                 string statusQuery = "Update orders Set order_status = @status Where order_id = " + orderId;
@@ -325,10 +407,10 @@ namespace Fund_Trade_Sys.Controllers
             while (reader.Read())
             {
                 holdFunds.Add(new HoldFund(){
-                    Unit =  (int)reader["units"],
-                    AveragePrice = (double)reader["ave_price"],
-                    Amount = (double)reader["amount"],
-                    FundCode = reader["fund_name"].ToString(),
+                    Unit =  Convert.ToInt32(reader["units"]),
+                    AveragePrice = Convert.ToDouble(reader["ave_price"]),
+                    Amount = Convert.ToDouble(reader["amount"]),
+                    FundCode = reader["fund_name"].ToString()
 
                 });
             }
@@ -350,9 +432,9 @@ namespace Fund_Trade_Sys.Controllers
             {
                 orders.Add(new Order()
                 {
-                    Units = (int)reader["units"],
-                    Price = (double)reader["price"],
-                    Amount = (double)reader["amount"],
+                    Units = Convert.ToInt32(reader["units"]),
+                    Price = Convert.ToDouble(reader["price"]),
+                    Amount = Convert.ToDouble(reader["amount"]),
                     FundCode = reader["fund_name"].ToString(),
                     OrderTime = (DateTime)reader["order_time"],
                     OrderStatus = reader["order_status"].ToString()
@@ -372,7 +454,6 @@ namespace Fund_Trade_Sys.Controllers
         public void UpdateDailyPrice()
         {
             
-
             //check whether today is a workday
             bool IsWorkday = DateTime.Now.DayOfWeek != DayOfWeek.Sunday && DateTime.Now.DayOfWeek != DayOfWeek.Saturday;
             if (IsWorkday)
@@ -437,16 +518,11 @@ namespace Fund_Trade_Sys.Controllers
                     }
                 }
                
-               
-               
-
 
             }
         }
 
 
-
-
-      
+   
     }
 }
