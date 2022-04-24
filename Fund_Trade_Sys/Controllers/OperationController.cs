@@ -209,6 +209,11 @@ namespace Fund_Trade_Sys.Controllers
         public IHttpActionResult CreateOrder(string fundCode, int unit, int accountId) 
 
         {
+            bool IsWorkday = DateTime.Now.DayOfWeek != DayOfWeek.Sunday && DateTime.Now.DayOfWeek != DayOfWeek.Saturday;
+            if (!IsWorkday)
+            {
+                return Ok("We don't work during weekends!");
+            }
             //update the daily price first
             UpdateDailyPrice();
             int orderId = 0;
@@ -337,7 +342,7 @@ namespace Fund_Trade_Sys.Controllers
                 if (unit<0 && isHold>=-unit)
                 {
                     string getAveragePrice = "Select top(1)  * From clientHoldFunds where fund_name = @fund_code and account_id = " + accountId;
-                   HoldFund holdFund= new HoldFund();                           
+                    HoldFund holdFund= new HoldFund();                           
                     sqlConnection.Open();
                     SqlCommand cmdf = new SqlCommand(getAveragePrice, sqlConnection);
                     cmdf.Parameters.AddWithValue("@fund_code",fundCode.ToString());
@@ -390,8 +395,7 @@ namespace Fund_Trade_Sys.Controllers
                 //todo order can be created but set the status to denied or discarded
             }
 
-
-        
+       
 
         }
 
@@ -446,10 +450,123 @@ namespace Fund_Trade_Sys.Controllers
 
             return Ok(orders);
         }
+
         [HttpGet]
-        public IHttpActionResult InvestmentPerformance(int accountId)
+        public IHttpActionResult InvestmentPerformance(int accountId,string fundCode, string fromDate,string toDate)
         {
-            return Ok();
+            SqlConnection sqlConnection = new SqlConnection(connection);
+            string getAveragePrice = "Select top(1)  * From clientHoldFunds where fund_name = @fund_code and account_id = " + accountId;
+            HoldFund holdFund = new HoldFund();
+            sqlConnection.Open();
+            SqlCommand cmdf = new SqlCommand(getAveragePrice, sqlConnection);
+            cmdf.Parameters.AddWithValue("@fund_code", fundCode.ToString());
+            SqlDataReader reader = cmdf.ExecuteReader();
+            while (reader.Read())
+            {
+
+                holdFund.Unit = Convert.ToInt32(reader["units"]);
+                holdFund.AveragePrice = Convert.ToDouble(reader["ave_price"]);
+                holdFund.Amount = Convert.ToDouble(reader["amount"]);
+                holdFund.FundCode = reader["fund_name"].ToString();
+
+
+            }
+            sqlConnection.Close();
+
+            
+            string query = "select Sum(profit) from margin where account_id = @accountId and fund_code = @fundCode and convert(date,margin_date) between @fromDate and @toDate ";
+            
+            sqlConnection.Open();
+            SqlCommand sqlCommand = new SqlCommand(query,sqlConnection);
+            sqlCommand.Parameters.AddWithValue("@accountId", accountId);
+            sqlCommand.Parameters.AddWithValue("@fundCode", fundCode);
+            sqlCommand.Parameters.AddWithValue("@fromDate", fromDate);
+            sqlCommand.Parameters.AddWithValue("@toDate",toDate);
+            var profits = Convert.ToDouble(sqlCommand.ExecuteScalar());
+            sqlConnection.Close();
+
+            UpdateDailyPrice();
+            bool IsWorkday = DateTime.Now.DayOfWeek != DayOfWeek.Sunday && DateTime.Now.DayOfWeek != DayOfWeek.Saturday;
+            Double unrealized;
+            if (IsWorkday)
+            {
+                string getPriceQuery = "Select price from securities where fund_code = @fundCode and Convert(date,price_date) = @toDate";
+                sqlConnection.Open();
+                SqlCommand getPriceCommand = new SqlCommand(getPriceQuery,sqlConnection);
+                getPriceCommand.Parameters.AddWithValue("@fundCode",fundCode.ToString());
+                getPriceCommand.Parameters.AddWithValue("@toDate", toDate);
+                var price = Convert.ToDouble(getPriceCommand.ExecuteScalar());
+                sqlConnection.Close();
+                unrealized = holdFund.Unit * (holdFund.AveragePrice - price);
+
+            }
+            else
+            {
+                string priceDate;
+                if(DateTime.Now.DayOfWeek == DayOfWeek.Sunday)
+                {
+                    priceDate = DateTime.Now.AddDays(-2).ToString("yyyy-MM-dd");
+                }
+                else
+                {
+                    priceDate = DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd");
+                }
+                string getPriceQuery = "Select price from securities where fund_code = @fundCode and Convert(date,price_date) = @toDate";
+                sqlConnection.Open();
+                SqlCommand getPriceCommand = new SqlCommand(getPriceQuery, sqlConnection);
+                getPriceCommand.Parameters.AddWithValue("@fundCode", fundCode.ToString());
+                getPriceCommand.Parameters.AddWithValue("@toDate", priceDate);
+                var price = Convert.ToDouble(getPriceCommand.ExecuteScalar());
+                sqlConnection.Close();
+                unrealized = holdFund.Unit * (holdFund.AveragePrice - price);
+            }
+            //Total cost is the money spent during a certain period, but the gain percentage is the gain earned during this period devides the money spend on this fund all the time
+            string costQuery = "Select Sum(amount) from orders where units>0 and account_id = @accountId and fund_name = @fundCode and convert(date,order_time) between @fromDate and @toDate";
+            sqlConnection.Open();
+            SqlCommand costCommand = new SqlCommand(costQuery, sqlConnection);
+            costCommand.Parameters.AddWithValue("@accountId", accountId);
+            costCommand.Parameters.AddWithValue("@fundCode", fundCode.ToString());
+            costCommand.Parameters.AddWithValue("@fromDate",fromDate);
+            costCommand.Parameters.AddWithValue("@toDate",toDate);
+            var cost = Convert.ToDouble( costCommand.ExecuteScalar());//total cost during the period
+            sqlConnection.Close();
+            //get the first margin for geting the previous cost on the fund
+            string marginQuery = "Select TOP(1) * from margin where account_id = @accountId and fund_code = @fundCode and margin_date >= @fromDate";
+            sqlConnection.Open();
+            SqlCommand marginCommand = new SqlCommand(marginQuery, sqlConnection);
+            marginCommand.Parameters.AddWithValue("@accountId", accountId);
+            marginCommand.Parameters.AddWithValue("@fundCode", fundCode);
+            marginCommand.Parameters.AddWithValue("@fromDate", fromDate);
+            SqlDataReader reader2 = marginCommand.ExecuteReader();
+            Margin margin = new Margin();
+            while (reader2.Read())
+            {
+
+
+                margin.HoldUnits = Convert.ToInt32(reader2["holdUnits"]);
+                margin.TradeUnits = Convert.ToInt32(reader2["tradeUnits"]);
+                margin.CurAmount = Convert.ToDouble(reader2["curAmount"]);
+                margin.CurAvePrice = Convert.ToDouble(reader2["curAvePrice"]);
+                
+            }
+            sqlConnection.Close();
+
+            InvestPerformance performance = new InvestPerformance()
+            {
+                Gain = profits,
+                UnrealizedGain = Math.Abs(unrealized),
+                GainPercentage = profits/((margin.HoldUnits-margin.TradeUnits)*margin.CurAvePrice+cost),// GAIN = period gain devided by  previous costs + the new costs during this period
+                Cost = cost,
+                FundCode = fundCode,
+                FromDate =Convert.ToDateTime(fromDate),
+                ToDate =Convert.ToDateTime(toDate)
+         
+            };
+
+
+
+
+            return Ok(performance);
         }
         public void UpdateDailyPrice()
         {
