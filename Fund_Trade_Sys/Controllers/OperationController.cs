@@ -482,7 +482,12 @@ namespace Fund_Trade_Sys.Controllers
             sqlCommand.Parameters.AddWithValue("@fundCode", fundCode);
             sqlCommand.Parameters.AddWithValue("@fromDate", fromDate);
             sqlCommand.Parameters.AddWithValue("@toDate",toDate);
-            var profits = Convert.ToDouble(sqlCommand.ExecuteScalar());
+            var dbprofits = sqlCommand.ExecuteScalar();
+            double profits=0.0;
+            if (dbprofits.GetType().Name != "DBNull")
+            {
+               profits = Convert.ToDouble(dbprofits);
+            }//null bug
             sqlConnection.Close();
 
             UpdateDailyPrice();
@@ -528,7 +533,13 @@ namespace Fund_Trade_Sys.Controllers
             costCommand.Parameters.AddWithValue("@fundCode", fundCode.ToString());
             costCommand.Parameters.AddWithValue("@fromDate",fromDate);
             costCommand.Parameters.AddWithValue("@toDate",toDate);
-            var cost = Convert.ToDouble( costCommand.ExecuteScalar());//total cost during the period
+            var dbcost = costCommand.ExecuteScalar();
+            double cost = 0.0;
+            if(dbcost.GetType() == typeof(DBNull))
+            {
+                return Ok("Client hasn't bought this Fund");
+            }
+            //total cost during the period
             sqlConnection.Close();
             //get the first margin for geting the previous cost on the fund
             string marginQuery = "Select TOP(1) * from margin where account_id = @accountId and fund_code = @fundCode and margin_date >= @fromDate";
