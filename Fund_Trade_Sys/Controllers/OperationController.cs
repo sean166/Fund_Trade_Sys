@@ -574,10 +574,53 @@ namespace Fund_Trade_Sys.Controllers
          
             };
 
-
-
-
             return Ok(performance);
+        }
+
+        [HttpGet]
+        public IHttpActionResult FundPerformance(string fromDate, string toDate, string fundCode)
+        {
+            double fPrice;
+            double tPrice;
+            FundPerformance fundPerformance = new FundPerformance();
+            string queryf = "Select price From securities where fund_code = @fundCode and convert(date,price_date) = @fromDate";
+            SqlConnection sqlConnection = new SqlConnection(connection);
+            sqlConnection.Open();
+            SqlCommand cmd = new SqlCommand(queryf, sqlConnection);
+            cmd.Parameters.AddWithValue("@fundCode",fundCode.ToString());
+            cmd.Parameters.AddWithValue("@fromDate", fromDate.ToString());
+            var dbFPrice = cmd.ExecuteScalar();
+            sqlConnection.Close();
+            if (dbFPrice != null)
+            {
+                fPrice = Convert.ToDouble(dbFPrice);
+            }
+            else
+            {
+                return Ok("Invalid Date or Fund Code No Fund Price Found");
+            }
+            sqlConnection.Open();           
+            string queryt = "Select price From securities where fund_code = @fundCode and convert(date,price_date) = @toDate";
+            SqlCommand sqlCommand = new SqlCommand(queryt, sqlConnection);
+            sqlCommand.Parameters.AddWithValue("@fundCode", fundCode.ToString());
+            sqlCommand.Parameters.AddWithValue("@toDate", toDate.ToString());
+            var dbTPrice = sqlCommand.ExecuteScalar();
+            sqlConnection.Close();
+            if (dbTPrice != null)
+            {
+                tPrice = Convert.ToDouble(dbTPrice);
+            }
+            else
+            {
+                return Ok("Invalid Date or Fund Code No Fund Price Found");
+            }
+
+            fundPerformance.FromeDate = Convert.ToDateTime(fromDate);
+            fundPerformance.ToDate = Convert.ToDateTime(toDate);
+            fundPerformance.FundCode = fundCode;
+            fundPerformance.Profits = tPrice - fPrice;
+            fundPerformance.ProfitsPercentage = (tPrice - fPrice)/fPrice;
+            return Ok(fundPerformance);
         }
         public void UpdateDailyPrice()
         {

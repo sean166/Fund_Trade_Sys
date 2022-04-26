@@ -226,6 +226,7 @@
     <Compile Include="Models\Client.cs" />
     <Compile Include="Models\ContextDB.cs" />
     <Compile Include="Models\Fund.cs" />
+    <Compile Include="Models\FundPerformance.cs" />
     <Compile Include="Models\FundPrice.cs" />
     <Compile Include="Models\HoldFund.cs" />
     <Compile Include="Models\IdentityModels.cs" />
@@ -240,6 +241,7 @@
     <Compile Include="Startup.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="App_Data\createdb.sql" />
     <Content Include="Areas\HelpPage\HelpPage.css" />
     <Content Include="Content\bootstrap-theme.css" />
     <Content Include="Content\bootstrap-theme.min.css" />
@@ -295,9 +297,7 @@
     <Content Include="Views\Shared\Error.cshtml" />
     <Content Include="Views\Shared\_Layout.cshtml" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="App_Data\" />
-  </ItemGroup>
+  <ItemGroup />
   <ItemGroup>
     <Content Include="fonts\glyphicons-halflings-regular.woff2" />
   </ItemGroup>

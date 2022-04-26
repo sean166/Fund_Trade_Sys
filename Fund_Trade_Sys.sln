@@ -5,6 +5,8 @@ VisualStudioVersion = 17.1.32407.343
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fund_Trade_Sys", "Fund_Trade_Sys\Fund_Trade_Sys.csproj", "{BBB7C2F1-DF3E-43D5-9D24-8F726CDE52BB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdminConsole", "AdminConsole\AdminConsole.csproj", "{DD28BCA6-5E4D-453F-821C-9D9569984C4B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{BBB7C2F1-DF3E-43D5-9D24-8F726CDE52BB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BBB7C2F1-DF3E-43D5-9D24-8F726CDE52BB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BBB7C2F1-DF3E-43D5-9D24-8F726CDE52BB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DD28BCA6-5E4D-453F-821C-9D9569984C4B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DD28BCA6-5E4D-453F-821C-9D9569984C4B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DD28BCA6-5E4D-453F-821C-9D9569984C4B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DD28BCA6-5E4D-453F-821C-9D9569984C4B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
