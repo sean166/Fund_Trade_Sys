@@ -7,12 +7,41 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using Newtonsoft.Json;
 
 namespace AdminConsole
 {
     internal class Program
     {
+
+
         static void Main(string[] args)
+        {
+            Console.WriteLine("1. Read table and export to csv file \n2. Get report and save to csv");
+            int choice;
+            Console.WriteLine("Enter the number of the opition: ");
+            choice = Convert.ToInt32(Console.ReadLine());
+            switch (choice)
+            {
+                case 1:
+                    OutputCsv();
+                    break;
+                case 2:
+                    CallFundSys();
+                    break;
+                default:
+                    Console.WriteLine("Please enter a valid input");
+                    break;
+
+            }
+
+
+        }
+
+        //export csv
+        static void OutputCsv()
         {
             string datetime = DateTime.Now.ToString("yyyyMMddHHmmss");
             string LogFolder = @"C:\FundDemo\";
@@ -91,6 +120,87 @@ namespace AdminConsole
                 }
                 Console.Write(ex.ToString());
             }
+        }
+
+        static void CallFundSys()
+        {
+            HttpClient client = new HttpClient();
+            string APIUrl = "https://localhost:44394/api/operation/getmarginreport";
+
+            client.BaseAddress = new Uri(APIUrl);
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            var responseTask = client.GetAsync(APIUrl);
+            responseTask.Wait();
+
+            if (responseTask.IsCompleted)
+            {
+                var result = responseTask.Result;
+                if (result.IsSuccessStatusCode)
+                {
+                    var messageTask = result.Content.ReadAsStringAsync();
+                    messageTask.Wait();
+                    Console.WriteLine(messageTask.Result);
+
+                    try
+                    {
+                        DataTable d_table = JsonConvert.DeserializeObject<DataTable>(messageTask.Result.ToString());
+                        string DestinationFolder = @"C:\FundDemo\";
+                        string datetime = DateTime.Now.ToString("yyyyMMddHHmmss");
+                        string FileDelimiter = ","; //You can provide comma or pipe or whatever you like
+                        string FileExtension = ".csv"; //Provide the extension you like such as .txt or .csv
+                        string FileFullPath = DestinationFolder + "\\" + "Report" + "_" + datetime + FileExtension;
+
+                        StreamWriter sw = null;
+                        sw = new StreamWriter(FileFullPath, false);
+
+                        // Write the Header Row to File
+                        int ColumnCount = d_table.Columns.Count;
+                        for (int ic = 0; ic < ColumnCount; ic++)
+                        {
+                            sw.Write(d_table.Columns[ic]);
+                            if (ic < ColumnCount - 1)
+                            {
+                                sw.Write(FileDelimiter);
+                            }
+                        }
+                        sw.Write(sw.NewLine);
+
+                        // Write All Rows to the File
+                        foreach (DataRow dr in d_table.Rows)
+                        {
+                            for (int ir = 0; ir < ColumnCount; ir++)
+                            {
+                                if (!Convert.IsDBNull(dr[ir]))
+                                {
+                                    sw.Write(dr[ir].ToString());
+                                }
+                                if (ir < ColumnCount - 1)
+                                {
+                                    sw.Write(FileDelimiter);
+                                }
+                            }
+                            sw.Write(sw.NewLine);
+
+                        }
+
+                        sw.Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex.Message);
+
+                    }
+                    Console.ReadLine();
+
+                }
+
+            }
+            else
+            {
+                Console.WriteLine("Internal server Error");
+            }
+            Console.WriteLine("Complete");
         }
     }
 }

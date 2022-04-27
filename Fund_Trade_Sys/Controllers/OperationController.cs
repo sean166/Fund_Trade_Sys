@@ -19,7 +19,7 @@ namespace Fund_Trade_Sys.Controllers
         {
             return "Welcome" + name;
         }
-           
+          
         [HttpGet]
         public IHttpActionResult getClient()
         {
@@ -45,6 +45,7 @@ namespace Fund_Trade_Sys.Controllers
 
         }
 
+        [Authorize]
         [HttpGet]
         public IHttpActionResult getFundListandPrice()
         {
@@ -72,6 +73,7 @@ namespace Fund_Trade_Sys.Controllers
 
         }
 
+        [Authorize]
         [HttpPost]
         public IHttpActionResult CreateDeposit(double money,int accountId)
         {
@@ -115,6 +117,7 @@ namespace Fund_Trade_Sys.Controllers
                 return Ok(cashFlow);
         }
 
+        [Authorize]
         [HttpPost]
         public IHttpActionResult MoneyWithdraw(double money, int accountId)
         {
@@ -158,6 +161,7 @@ namespace Fund_Trade_Sys.Controllers
             return Ok(cashFlow);
         }
 
+        [Authorize]
         [HttpGet]
         public IHttpActionResult GetBalance(int accountId)
         {
@@ -205,6 +209,7 @@ namespace Fund_Trade_Sys.Controllers
             return Ok(cashFlows);
         }
 
+        [Authorize]
         [HttpPost]
         public IHttpActionResult CreateOrder(string fundCode, int unit, int accountId) 
 
@@ -399,6 +404,7 @@ namespace Fund_Trade_Sys.Controllers
 
         }
 
+        [Authorize]
         [HttpGet]
         public IHttpActionResult GetHoldingFunds(int accountId)
         {
@@ -423,6 +429,7 @@ namespace Fund_Trade_Sys.Controllers
             return Ok(holdFunds);
         }
 
+        [Authorize]
         [HttpGet]
         public IHttpActionResult GetOrderHistory(int accountId)
         {
@@ -451,8 +458,9 @@ namespace Fund_Trade_Sys.Controllers
             return Ok(orders);
         }
 
+        [Authorize]
         [HttpGet]
-        public IHttpActionResult InvestmentPerformance(int accountId,string fundCode, string fromDate,string toDate)
+        public IHttpActionResult InvestmentPerformance(int accountId, string fundCode, string fromDate, string toDate)
         {
             SqlConnection sqlConnection = new SqlConnection(connection);
             string getAveragePrice = "Select top(1)  * From clientHoldFunds where fund_name = @fund_code and account_id = " + accountId;
@@ -473,20 +481,20 @@ namespace Fund_Trade_Sys.Controllers
             }
             sqlConnection.Close();
 
-            
+
             string query = "select Sum(profit) from margin where account_id = @accountId and fund_code = @fundCode and convert(date,margin_date) between @fromDate and @toDate ";
-            
+
             sqlConnection.Open();
-            SqlCommand sqlCommand = new SqlCommand(query,sqlConnection);
+            SqlCommand sqlCommand = new SqlCommand(query, sqlConnection);
             sqlCommand.Parameters.AddWithValue("@accountId", accountId);
             sqlCommand.Parameters.AddWithValue("@fundCode", fundCode);
             sqlCommand.Parameters.AddWithValue("@fromDate", fromDate);
-            sqlCommand.Parameters.AddWithValue("@toDate",toDate);
+            sqlCommand.Parameters.AddWithValue("@toDate", toDate);
             var dbprofits = sqlCommand.ExecuteScalar();
-            double profits=0.0;
+            double profits = 0.0;
             if (dbprofits.GetType().Name != "DBNull")
             {
-               profits = Convert.ToDouble(dbprofits);
+                profits = Convert.ToDouble(dbprofits);
             }//null bug
             sqlConnection.Close();
 
@@ -497,8 +505,8 @@ namespace Fund_Trade_Sys.Controllers
             {
                 string getPriceQuery = "Select price from securities where fund_code = @fundCode and Convert(date,price_date) = @toDate";
                 sqlConnection.Open();
-                SqlCommand getPriceCommand = new SqlCommand(getPriceQuery,sqlConnection);
-                getPriceCommand.Parameters.AddWithValue("@fundCode",fundCode.ToString());
+                SqlCommand getPriceCommand = new SqlCommand(getPriceQuery, sqlConnection);
+                getPriceCommand.Parameters.AddWithValue("@fundCode", fundCode.ToString());
                 getPriceCommand.Parameters.AddWithValue("@toDate", toDate);
                 var price = Convert.ToDouble(getPriceCommand.ExecuteScalar());
                 sqlConnection.Close();
@@ -508,7 +516,7 @@ namespace Fund_Trade_Sys.Controllers
             else
             {
                 string priceDate;
-                if(DateTime.Now.DayOfWeek == DayOfWeek.Sunday)
+                if (DateTime.Now.DayOfWeek == DayOfWeek.Sunday)
                 {
                     priceDate = DateTime.Now.AddDays(-2).ToString("yyyy-MM-dd");
                 }
@@ -531,13 +539,19 @@ namespace Fund_Trade_Sys.Controllers
             SqlCommand costCommand = new SqlCommand(costQuery, sqlConnection);
             costCommand.Parameters.AddWithValue("@accountId", accountId);
             costCommand.Parameters.AddWithValue("@fundCode", fundCode.ToString());
-            costCommand.Parameters.AddWithValue("@fromDate",fromDate);
-            costCommand.Parameters.AddWithValue("@toDate",toDate);
+            costCommand.Parameters.AddWithValue("@fromDate", fromDate);
+            costCommand.Parameters.AddWithValue("@toDate", toDate);
             var dbcost = costCommand.ExecuteScalar();
+
             double cost = 0.0;
-            if(dbcost.GetType() == typeof(DBNull))
+
+            if (dbcost.GetType() == typeof(DBNull))
             {
                 return Ok("Client hasn't bought this Fund");
+            }
+            else
+            {
+                cost =  Convert.ToDouble(dbcost);
             }
             //total cost during the period
             sqlConnection.Close();
@@ -578,7 +592,7 @@ namespace Fund_Trade_Sys.Controllers
         }
 
         [HttpGet]
-        public IHttpActionResult FundPerformance(string fromDate, string toDate, string fundCode)
+        public IHttpActionResult FundPerformance(string fromDate, string toDate, string fundCode)  
         {
             double fPrice;
             double tPrice;
@@ -621,6 +635,35 @@ namespace Fund_Trade_Sys.Controllers
             fundPerformance.Profits = tPrice - fPrice;
             fundPerformance.ProfitsPercentage = (tPrice - fPrice)/fPrice;
             return Ok(fundPerformance);
+        }
+
+        [HttpGet]
+        public IHttpActionResult GetMarginReport()
+        {
+            List<Margin> marginReports = new List<Margin>();
+            string query = "Select * From margin";
+            SqlConnection sqlConnection = new SqlConnection(connection);
+            sqlConnection.Open();
+            SqlCommand sqlCommand = new SqlCommand(query, sqlConnection);
+            SqlDataReader reader = sqlCommand.ExecuteReader();
+            while (reader.Read())
+            {
+                marginReports.Add(new Margin()
+                {
+                    MarginId= Convert.ToInt32(reader["margin_id"]),
+                    FundCode =reader["fund_code"].ToString(),
+                    Profit = Convert.ToDouble(reader["profit"]),
+                    CurAvePrice = Convert.ToDouble(reader["curAvePrice"]),
+                    MarketPrice = Convert.ToDouble(reader["markPrice"]),
+                    CurAmount = Convert.ToDouble(reader["curAmount"]),
+                    HoldUnits = Convert.ToInt32(reader["holdUnits"]),
+                    TradeUnits = Convert.ToInt32(reader["tradeUnits"]),
+                    MarginDate = Convert.ToDateTime(reader["margin_date"])
+                  
+                });
+            }
+            sqlConnection.Close();
+            return Ok(marginReports);
         }
         public void UpdateDailyPrice()
         {
